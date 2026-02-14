@@ -72,7 +72,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
     <script>
-        // ══════════════════════════════════════════════════════════ CONFIG ════════════
         
         const CONFIG = {
             FIREBASE_CONFIG: {
@@ -91,21 +90,21 @@
             FPS: 60,
             
             GROUND_RATIO: 0.75,
-            ACCEL: 0.4,         // Acceleration when moving
-            MAX_SPEED: 2.5,     // Max walking speed (slower than before)
-            FRICTION: 0.85,     // Friction coefficient
-            ROLL_ACCEL: 0.6,    // Acceleration when rolling
-            ROLL_MAX_SPEED: 10,  // Max rolling speed (faster)
+            ACCEL: 0.4,
+            MAX_SPEED: 2.5,
+            FRICTION: 0.85,
+            ROLL_ACCEL: 0.6,
+            ROLL_MAX_SPEED: 10,
             JUMP_VEL: -15,
             GRAVITY: 0.7,
             SPRITE_H: 72,
-            PUSH_HZ: 50, // ms
+            PUSH_HZ: 50,
             
             CHAT_DUR: 6.0,
             CHAT_MAX: 60,
             
-            TREE_DENSITY: 0.003, // Trees per x unit
-            TREE_MIN_DIST: 200,  // Min distance between trees
+            TREE_DENSITY: 0.003,
+            TREE_MIN_DIST: 200,
             
             SKY_COL: '#87CEEB',
             GND_TOP: 'rgb(80, 160, 60)',
@@ -123,7 +122,6 @@
             }
         };
         
-        // ══════════════════════════════════════════════════════════ UTILS ═════════════
         
         function genPID() {
             return 'p_' + Math.random().toString(36).substr(2, 10);
@@ -159,7 +157,7 @@
             return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
         }
         
-        // Seeded random for consistent tree placement
+
         class SeededRandom {
             constructor(seed) {
                 this.seed = seed;
@@ -171,7 +169,7 @@
             }
         }
         
-        // ══════════════════════════════════════════════════════════ FIREBASE ══════════
+        // firebase crap
         
         class FirebaseSync {
             constructor() {
@@ -284,7 +282,7 @@
             }
         }
         
-        // ══════════════════════════════════════════════════════════ SPRITES ═══════════
+        // spritess
         
         class SpriteManager {
             constructor() {
@@ -315,7 +313,7 @@
             }
             
             async loadSprite(name, height) {
-                // Try to load from assets folder
+                // load things from the asset folder
                 return new Promise((resolve) => {
                     const img = new Image();
                     img.crossOrigin = 'anonymous';
@@ -350,17 +348,17 @@
                         resolve(canvas);
                     };
                     img.onerror = () => {
-                        // Create placeholder tree
+                        // tree
                         const canvas = document.createElement('canvas');
                         canvas.width = 80;
                         canvas.height = 120;
                         const ctx = canvas.getContext('2d');
                         
-                        // Tree trunk
+                        // tree 2
                         ctx.fillStyle = '#8B4513';
                         ctx.fillRect(30, 70, 20, 50);
                         
-                        // Tree crown
+                        // tree 3
                         ctx.fillStyle = '#228B22';
                         ctx.beginPath();
                         ctx.arc(40, 50, 35, 0, Math.PI * 2);
@@ -394,7 +392,7 @@
                     ctx.drawImage(canvas, 0, 0);
                     
                     try {
-                        // Try to apply color tint
+                        // tint the ugly ass player
                         const imageData = ctx.getImageData(0, 0, tinted.width, tinted.height);
                         const data = imageData.data;
                         
@@ -410,7 +408,7 @@
                         
                         ctx.putImageData(imageData, 0, 0);
                     } catch (e) {
-                        // CORS error - fallback to color overlay
+                        // fallback error
                         console.warn('[Sprites] CORS error, using fallback tinting');
                         ctx.globalCompositeOperation = 'multiply';
                         const [r, g, b] = hslToRgb(hue, 0.85, 0.7);
@@ -429,7 +427,7 @@
             }
         }
         
-        // ══════════════════════════════════════════════════════════ PLAYER ════════════
+        // player
         
         class Player {
             constructor(pid, name, sprites, isSelf = false) {
@@ -449,7 +447,7 @@
                 this.chat = '';
                 this.chatT = 0;
                 
-                // Get exact sprite dimensions
+                // get the sprite demensions
                 const sprite = this.sprites['idle'];
                 this.spriteH = sprite.height;
                 this.spriteW = sprite.width;
@@ -464,7 +462,7 @@
             }
             
             physics(dt) {
-                // Apply friction
+                // Apply FRICTIONNN
                 this.vx *= CONFIG.FRICTION;
                 
                 // Gravity
@@ -472,18 +470,18 @@
                     this.vy += CONFIG.GRAVITY;
                 }
                 
-                // Update position
+                // Update POSITIONNN
                 this.x += this.vx;
                 this.y += this.vy;
                 
-                // Ground collision
+                // Ground COLLISINNNN'
                 if (this.y >= 0) {
                     this.y = 0;
                     this.vy = 0;
                     this.onGround = true;
                 }
                 
-                // Update roll angle based on velocity
+                // Update roll angle based on VELOCITYYY- that dont ryhme
                 if (this.isRolling && Math.abs(this.vx) > 0.1) {
                     this.rollAngle += this.vx * 0.15;
                 }
@@ -503,7 +501,7 @@
                 const sx = Math.floor(this.x - camX - this.hw);
                 const sy = groundY - sprite.height + Math.floor(this.y);
                 
-                // Draw sprite with rotation if rolling
+                // rotate that boy.
                 if (this.isRolling) {
                     ctx.save();
                     ctx.translate(Math.floor(this.x - camX), groundY + Math.floor(this.y) - this.spriteH / 2);
@@ -514,7 +512,7 @@
                     ctx.drawImage(sprite, sx, sy);
                 }
                 
-                // Debug hitbox
+                // hitbox
                 if (debugHitbox) {
                     ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
                     ctx.lineWidth = 2;
@@ -568,7 +566,7 @@
                 
                 const bg = isSelf ? 'rgba(225, 245, 255, 0.9)' : 'rgba(255, 255, 255, 0.9)';
                 
-                // Bubble
+                // bubl :3
                 ctx.fillStyle = bg;
                 ctx.beginPath();
                 ctx.roundRect(bx, by, bw, bh, 8);
@@ -578,7 +576,7 @@
                 ctx.lineWidth = 1;
                 ctx.stroke();
                 
-                // Tail
+                // Tail of the text bubl
                 ctx.fillStyle = bg;
                 ctx.beginPath();
                 ctx.moveTo(cx - 7, by + bh);
@@ -596,7 +594,7 @@
             }
         }
         
-        // ══════════════════════════════════════════════════════════ COLLISION ═════════
+        // collision
         
         function resolveCollisions(local, remotes) {
             for (let rp of remotes) {
@@ -615,7 +613,7 @@
                     continue;
                 }
                 
-                // Calculate overlaps
+                // calc overlap
                 const overlapLeft = lRight - rLeft;
                 const overlapRight = rRight - lLeft;
                 const overlapTop = lBottom - rTop;
@@ -660,13 +658,13 @@
         class TreeManager {
             constructor(treeSprite) {
                 this.treeSprite = treeSprite;
-                this.treeSeed = 12345; // Fixed seed for consistent world
+                this.treeSeed = 6742069;
                 this.treeCache = new Map();
             }
             
             getTreesInRange(startX, endX) {
                 const trees = [];
-                const chunkSize = 500;
+                const chunkSize = 800;
                 const startChunk = Math.floor(startX / chunkSize);
                 const endChunk = Math.floor(endX / chunkSize);
                 
@@ -709,7 +707,7 @@
             }
         }
         
-        // ══════════════════════════════════════════════════════════ GAME ══════════════
+        // game
         
         class Game {
             constructor() {
@@ -774,7 +772,7 @@
                     this.keys[e.code] = false;
                 });
                 
-                // Mouse events
+                // mouse events
                 this.canvas.addEventListener('mousemove', (e) => {
                     const rect = this.canvas.getBoundingClientRect();
                     const scaleX = CONFIG.W / rect.width;
@@ -954,7 +952,7 @@
                     }
                 }
                 
-                // Update/add players
+                // update/add plyrs
                 for (let [pid, data] of Object.entries(othersData)) {
                     if (!this.remotes[pid]) {
                         const hue = hueFromPID(pid);
@@ -967,11 +965,11 @@
                     const rp = this.remotes[pid];
                     rp.name = data.name || '???';
                     
-                    // Smooth interpolation for position
+                    // Smooth ✨ interpolation ✨ for position
                     const targetX = data.x || 0;
                     rp.x += (targetX - rp.x) * 0.2;
                     
-                    // Sync vertical position and velocity for jumps
+                    // sync
                     const targetY = data.y || 0;
                     rp.y = targetY;
                     rp.vy = data.vy || 0;
@@ -983,7 +981,7 @@
                     rp.isRolling = data.rolling === 1;
                     rp.rollAngle = data.roll_angle || 0;
                     
-                    // Chat
+                    // Chat (chat this is crazy chat)
                     const chatTs = data.chat_ts || 0;
                     const age = (Date.now() - chatTs) / 1000;
                     if (data.chat && age < CONFIG.CHAT_DUR) {
@@ -1037,11 +1035,11 @@
                     }
                 }
                 
-                // Physics
+                // Physics!!
                 this.local.physics(dt);
                 this.local.update(dt);
                 
-                // Collision
+                // Collision!!!!!!!!!
                 const remoteList = Object.values(this.remotes);
                 resolveCollisions(this.local, remoteList);
                 
@@ -1051,22 +1049,22 @@
                     this.local.onGround = true;
                 }
                 
-                // Update remotes
+                // Update remotes!!!!!!!!!!!!
                 for (let rp of remoteList) {
                     rp.update(dt);
                 }
                 
-                // Camera
+                // Camera!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 this.camX = this.local.x - CONFIG.W / 2;
                 
-                // Chat blink
+                // Chat blink!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 this.chatBlink += dt;
                 if (this.chatBlink > 0.5) {
                     this.chatBlink = 0;
                     this.chatCursorVisible = !this.chatCursorVisible;
                 }
                 
-                // Firebase push
+                // Firebase push!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 const now = Date.now();
                 if (now - this.lastPush >= CONFIG.PUSH_HZ) {
                     this.lastPush = now;
@@ -1089,7 +1087,7 @@
                 const ctx = this.ctx;
                 const groundY = Math.floor(CONFIG.H * CONFIG.GROUND_RATIO);
                 
-                // Sky
+                // Sky!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 ctx.fillStyle = CONFIG.SKY_COL;
                 ctx.fillRect(0, 0, CONFIG.W, CONFIG.H);
                 
@@ -1098,7 +1096,7 @@
                     this.treeManager.draw(ctx, this.camX, groundY);
                 }
                 
-                // Ground
+                // Ground <3
                 ctx.fillStyle = CONFIG.GND_TOP;
                 ctx.fillRect(0, groundY, CONFIG.W, 22);
                 ctx.fillStyle = CONFIG.GND_MID;
@@ -1120,10 +1118,10 @@
                         this.local.draw(ctx, this.camX, groundY, this.debugHitbox);
                     }
                     
-                    // Chat log
+                    // log the chat
                     this.drawChatLog();
                     
-                    // HUD
+                    // HU(D/ZZ)
                     this.drawHUD();
                 } else if (this.state === 'paused') {
                     // Draw game in background
@@ -1148,16 +1146,16 @@
                 
                 // Shadow
                 ctx.fillStyle = '#000000';
-                ctx.fillText('Bob Playgrounds', CONFIG.W / 2 + 3, CONFIG.H / 2 - 167);
+                ctx.fillText('Bob Playground', CONFIG.W / 2 + 3, CONFIG.H / 2 - 167);
                 
                 // Main title
                 ctx.fillStyle = '#FFFFFF';
-                ctx.fillText('Bob Playgrounds', CONFIG.W / 2, CONFIG.H / 2 - 170);
+                ctx.fillText('Bob Playground', CONFIG.W / 2, CONFIG.H / 2 - 170);
                 
                 // Subtitle
                 ctx.font = '18px "Segoe UI"';
                 ctx.fillStyle = 'rgb(210, 235, 255)';
-                ctx.fillText(`Welcome!`, CONFIG.W / 2, CONFIG.H / 2 - 90);
+                ctx.fillText(`welcome to the grounds of play`, CONFIG.W / 2, CONFIG.H / 2 - 90);
                 
                 // Play button
                 const bw = 280, bh = 50;
@@ -1202,7 +1200,7 @@
                 ctx.lineWidth = 2;
                 ctx.stroke();
                 
-                // Title
+                // Title again
                 ctx.font = 'bold 26px "Segoe UI"';
                 ctx.fillStyle = '#FFFFFF';
                 ctx.textAlign = 'center';
@@ -1213,7 +1211,7 @@
                 ctx.fillStyle = 'rgb(180, 200, 255)';
                 ctx.fillText('Choose your name', CONFIG.W / 2, py + 86);
                 
-                // Input box
+                // Input box AAAAAAAAAAAAAAAAAAA
                 const fx = px + 30, fy = py + 100, fw = pw - 60, fh = 40;
                 ctx.fillStyle = 'rgb(30, 30, 55)';
                 ctx.beginPath();
@@ -1224,7 +1222,7 @@
                 ctx.lineWidth = 2;
                 ctx.stroke();
                 
-                // Text
+                // TextAAAAAAAAAAA
                 ctx.font = '18px "Segoe UI"';
                 ctx.fillStyle = this.playerName ? 'rgb(210, 220, 240)' : 'rgb(100, 110, 130)';
                 ctx.textAlign = 'left';
@@ -1238,7 +1236,7 @@
                     ctx.fillText('|', fx + 10 + textWidth, fy + 26);
                 }
                 
-                // Hint
+                // Hint (kill me)
                 ctx.font = '14px "Segoe UI"';
                 ctx.fillStyle = 'rgb(120, 140, 160)';
                 ctx.textAlign = 'center';
@@ -1250,7 +1248,7 @@
                 const lw = 360, lhBox = 165;
                 const ly = CONFIG.H - lhBox - (this.typing ? 50 : 10);
                 
-                // Background
+                // never endind loop of backgrounds
                 ctx.fillStyle = 'rgba(10, 10, 20, 0.59)';
                 ctx.beginPath();
                 ctx.roundRect(8, ly, lw, lhBox, 8);
@@ -1335,7 +1333,7 @@
             drawPauseMenu() {
                 const ctx = this.ctx;
                 
-                // Dim background
+                // see? (dim bg)
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
                 ctx.fillRect(0, 0, CONFIG.W, CONFIG.H);
                 
@@ -1412,13 +1410,13 @@
                 if (this.firebase.firebaseOk && this.playerName && this.pid) {
                     console.log('[Cleanup] Removing player from server...');
                     
-                    // Remove player data
+                    // "eliminate" player data
                     this.firebase.remove();
                     
-                    // Release name
+                    // "Release" name
                     await this.firebase.releaseName(this.playerName);
                     
-                    // Decrement online count
+                    // "Decrement online count"
                     await this.firebase.decrementAndMaybeWipe();
                     
                     console.log('[Cleanup] Player removed ✓');
@@ -1426,12 +1424,12 @@
             }
         }
         
-        // ══════════════════════════════════════════════════════════ START ═════════════
+        // start
         
         const game = new Game();
         game.init();
         
-        // Cleanup on page close/refresh
+        // Cleanup on isle page (close/refresh without fancy wording)
         window.addEventListener('beforeunload', (e) => {
             game.cleanup();
         });
