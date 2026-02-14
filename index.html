@@ -58,6 +58,75 @@
         .hidden {
             display: none !important;
         }
+        
+        /* Mobile Controls */
+        #mobileControls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 200px;
+            pointer-events: none;
+            z-index: 100;
+            display: none;
+        }
+        
+        #mobileControls.visible {
+            display: block;
+        }
+        
+        .mobile-btn {
+            position: absolute;
+            pointer-events: all;
+            background: rgba(255, 255, 255, 0.15);
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            transition: background 0.1s;
+        }
+        
+        .mobile-btn.pressed {
+            background: rgba(255, 255, 255, 0.35);
+            border-color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .mobile-btn.dpad {
+            width: 80px;
+            height: 80px;
+        }
+        
+        .mobile-btn.action {
+            width: 90px;
+            height: 90px;
+        }
+        
+        #btnLeft {
+            bottom: 60px;
+            left: 20px;
+        }
+        
+        #btnRight {
+            bottom: 60px;
+            left: 120px;
+        }
+        
+        #btnJump {
+            bottom: 90px;
+            right: 130px;
+        }
+        
+        #btnRoll {
+            bottom: 20px;
+            right: 30px;
+        }
     </style>
 </head>
 <body>
@@ -66,6 +135,14 @@
         <p>Loading...</p>
     </div>
     <canvas id="gameCanvas"></canvas>
+    
+    <!-- Mobile Controls -->
+    <div id="mobileControls">
+        <div class="mobile-btn dpad" id="btnLeft">◄</div>
+        <div class="mobile-btn dpad" id="btnRight">►</div>
+        <div class="mobile-btn action" id="btnJump">▲</div>
+        <div class="mobile-btn action" id="btnRoll">⟳</div>
+    </div>
 
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -157,6 +234,11 @@
             return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
         }
         
+        // Detect if mobile/tablet
+        function isMobileDevice() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+        }
 
         class SeededRandom {
             constructor(seed) {
@@ -745,8 +827,56 @@
                 
                 this.debugHitbox = false;
                 
+                // Mobile controls
+                this.isMobile = isMobileDevice();
+                this.touchButtons = {
+                    left: false,
+                    right: false,
+                    jump: false,
+                    roll: false
+                };
+                
                 this.loadBinds();
                 this.setupInput();
+                this.setupMobileControls();
+            }
+            
+            setupMobileControls() {
+                if (!this.isMobile) return;
+                
+                const mobileControls = document.getElementById('mobileControls');
+                mobileControls.classList.add('visible');
+                
+                // Helper to handle touch events
+                const setupButton = (id, key) => {
+                    const btn = document.getElementById(id);
+                    
+                    const start = (e) => {
+                        e.preventDefault();
+                        this.touchButtons[key] = true;
+                        btn.classList.add('pressed');
+                    };
+                    
+                    const end = (e) => {
+                        e.preventDefault();
+                        this.touchButtons[key] = false;
+                        btn.classList.remove('pressed');
+                    };
+                    
+                    btn.addEventListener('touchstart', start);
+                    btn.addEventListener('touchend', end);
+                    btn.addEventListener('touchcancel', end);
+                    
+                    // Also support mouse for testing
+                    btn.addEventListener('mousedown', start);
+                    btn.addEventListener('mouseup', end);
+                    btn.addEventListener('mouseleave', end);
+                };
+                
+                setupButton('btnLeft', 'left');
+                setupButton('btnRight', 'right');
+                setupButton('btnJump', 'jump');
+                setupButton('btnRoll', 'roll');
             }
             
             resize() {
@@ -1003,19 +1133,28 @@
                 
                 // Movement
                 if (!this.typing) {
-                    const isShiftHeld = this.keys[this.binds.roll] || this.keys['ShiftRight'];
-                    const isMoving = this.keys[this.binds.move_left] || this.keys['ArrowLeft'] || 
-                                     this.keys[this.binds.move_right] || this.keys['ArrowRight'];
+                    // Check both keyboard and mobile controls
+                    const leftPressed = this.keys[this.binds.move_left] || this.keys['ArrowLeft'] || this.touchButtons.left;
+                    const rightPressed = this.keys[this.binds.move_right] || this.keys['ArrowRight'] || this.touchButtons.right;
+                    const rollPressed = this.keys[this.binds.roll] || this.keys['ShiftRight'] || this.touchButtons.roll;
+                    const jumpPressed = this.touchButtons.jump;
                     
-                    // Check if rolling (shift + moving)
-                    if (isShiftHeld && (Math.abs(this.local.vx) > 0.5 || isMoving)) {
+                    const isMoving = leftPressed || rightPressed;
+                    
+                    // Mobile jump handling
+                    if (jumpPressed) {
+                        this.local.jump();
+                    }
+                    
+                    // Check if rolling (shift/roll button + moving)
+                    if (rollPressed && (Math.abs(this.local.vx) > 0.5 || isMoving)) {
                         this.local.isRolling = true;
                         const accel = CONFIG.ROLL_ACCEL;
                         const maxSpeed = CONFIG.ROLL_MAX_SPEED;
                         
-                        if (this.keys[this.binds.move_left] || this.keys['ArrowLeft']) {
+                        if (leftPressed) {
                             this.local.vx = Math.max(this.local.vx - accel, -maxSpeed);
-                        } else if (this.keys[this.binds.move_right] || this.keys['ArrowRight']) {
+                        } else if (rightPressed) {
                             this.local.vx = Math.min(this.local.vx + accel, maxSpeed);
                         }
                     } else {
@@ -1023,10 +1162,10 @@
                         const accel = CONFIG.ACCEL;
                         const maxSpeed = CONFIG.MAX_SPEED;
                         
-                        if (this.keys[this.binds.move_left] || this.keys['ArrowLeft']) {
+                        if (leftPressed) {
                             this.local.vx = Math.max(this.local.vx - accel, -maxSpeed);
                             this.local.facing = 'move_left';
-                        } else if (this.keys[this.binds.move_right] || this.keys['ArrowRight']) {
+                        } else if (rightPressed) {
                             this.local.vx = Math.min(this.local.vx + accel, maxSpeed);
                             this.local.facing = 'move_right';
                         } else {
@@ -1309,7 +1448,7 @@
                 const lines = [
                     `x: ${Math.floor(this.local.x).toLocaleString()}`,
                     `online: ${Object.keys(this.remotes).length + 1}`,
-                    '/ chat  ·  SHIFT roll  ·  ESC menu  ·  F3 debug'
+                    this.isMobile ? 'touch controls active' : '/ chat  ·  SHIFT roll  ·  ESC menu  ·  F3 debug'
                 ];
                 
                 for (let i = 0; i < lines.length; i++) {
