@@ -76,14 +76,14 @@
         
         const CONFIG = {
             FIREBASE_CONFIG: {
-                apiKey: "AIzaSyCQ2kBq9EpO0OmoLiUYk0kvmz6xn4G5Pio",
-                authDomain: "bob-playgrounds.firebaseapp.com",
-                databaseURL: "https://bob-playgrounds-default-rtdb.firebaseio.com",
-                projectId: "bob-playgrounds",
-                storageBucket: "bob-playgrounds.firebasestorage.app",
-                messagingSenderId: "538331788971",
-                appId: "1:538331788971:web:5678a0f5f3816727c7a9ee",
-                measurementId: "G-RBVQKVQBBQ"
+              apiKey: "AIzaSyCQ2kBq9EpO0OmoLiUYk0kvmz6xn4G5Pio",
+              authDomain: "bob-playgrounds.firebaseapp.com",
+              databaseURL: "https://bob-playgrounds-default-rtdb.firebaseio.com",
+              projectId: "bob-playgrounds",
+              storageBucket: "bob-playgrounds.firebasestorage.app",
+              messagingSenderId: "538331788971",
+              appId: "1:538331788971:web:5678a0f5f3816727c7a9ee",
+              measurementId: "G-RBVQKVQBBQ"
             },
             
             W: 1280,
@@ -578,7 +578,7 @@
                 this.spriteManager = new SpriteManager();
                 this.firebase = new FirebaseSync();
                 
-                this.state = 'loading';
+                this.state = 'loading';  // loading -> mainMenu -> nameInput -> playing -> paused
                 this.playerName = '';
                 this.pid = null;
                 this.local = null;
@@ -629,7 +629,13 @@
             }
             
             handleKeyDown(e) {
-                if (this.state === 'nameInput') {
+                if (this.state === 'mainMenu') {
+                    // Main menu - press Enter or Space to continue
+                    if (e.code === 'Enter' || e.code === 'Space') {
+                        e.preventDefault();
+                        this.state = 'nameInput';
+                    }
+                } else if (this.state === 'nameInput') {
                     // Name input handling
                     if (e.code === 'Enter' && this.playerName.trim()) {
                         e.preventDefault();
@@ -728,8 +734,8 @@
                 
                 document.getElementById('loadingScreen').classList.add('hidden');
                 
-                // Show name input
-                this.state = 'nameInput';
+                // Show main menu
+                this.state = 'mainMenu';
                 this.run();
             }
             
@@ -874,7 +880,9 @@
                 ctx.fillStyle = CONFIG.GND_DIRT;
                 ctx.fillRect(0, groundY + 42, CONFIG.W, CONFIG.H);
                 
-                if (this.state === 'nameInput') {
+                if (this.state === 'mainMenu') {
+                    this.drawMainMenu();
+                } else if (this.state === 'nameInput') {
                     this.drawNameInput();
                 } else if (this.state === 'playing') {
                     // Draw players
@@ -902,6 +910,51 @@
                     
                     this.drawPauseMenu();
                 }
+            }
+            
+            
+            drawMainMenu() {
+                const ctx = this.ctx;
+                
+                // Title with shadow
+                ctx.font = 'bold 72px Impact, Arial Black, sans-serif';
+                ctx.textAlign = 'center';
+                
+                // Shadow
+                ctx.fillStyle = '#000000';
+                ctx.fillText('Bob Playgrounds', CONFIG.W / 2 + 3, CONFIG.H / 2 - 167);
+                
+                // Main title
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillText('Bob Playgrounds', CONFIG.W / 2, CONFIG.H / 2 - 170);
+                
+                // Subtitle
+                ctx.font = '18px "Segoe UI"';
+                ctx.fillStyle = 'rgb(210, 235, 255)';
+                ctx.fillText(`Welcome!`, CONFIG.W / 2, CONFIG.H / 2 - 90);
+                
+                // Play button
+                const bw = 280, bh = 50;
+                const bx = CONFIG.W / 2 - bw / 2;
+                const by = CONFIG.H / 2 - 30;
+                
+                ctx.fillStyle = 'rgba(60, 110, 210, 0.9)';
+                ctx.beginPath();
+                ctx.roundRect(bx, by, bw, bh, 10);
+                ctx.fill();
+                
+                ctx.strokeStyle = 'rgba(120, 170, 255, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.font = 'bold 24px "Segoe UI"';
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillText('▶  Play', CONFIG.W / 2, by + 33);
+                
+                // Hint
+                ctx.font = '14px "Segoe UI"';
+                ctx.fillStyle = 'rgb(180, 200, 220)';
+                ctx.fillText('Press Enter or Space', CONFIG.W / 2, by + 90);
             }
             
             drawNameInput() {
@@ -1115,10 +1168,19 @@
             }
             
             async cleanup() {
-                if (this.firebase.firebaseOk && this.playerName) {
-                    await this.firebase.releaseName(this.playerName);
+                if (this.firebase.firebaseOk && this.playerName && this.pid) {
+                    console.log('[Cleanup] Removing player from server...');
+                    
+                    // Remove player data
                     this.firebase.remove();
+                    
+                    // Release name
+                    await this.firebase.releaseName(this.playerName);
+                    
+                    // Decrement online count
                     await this.firebase.decrementAndMaybeWipe();
+                    
+                    console.log('[Cleanup] Player removed ✓');
                 }
             }
         }
@@ -1128,8 +1190,16 @@
         const game = new Game();
         game.init();
         
-        window.addEventListener('beforeunload', () => {
+        // Cleanup on page close/refresh
+        window.addEventListener('beforeunload', (e) => {
             game.cleanup();
+        });
+        
+        // Also cleanup on visibility change (tab close/switch)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && game.state === 'playing') {
+                game.cleanup();
+            }
         });
     </script>
 </body>
