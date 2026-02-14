@@ -91,14 +91,21 @@
             FPS: 60,
             
             GROUND_RATIO: 0.75,
-            MOVE_SPEED: 3,      // Was 5 - now slower
-            JUMP_VEL: -15,      // Was -13 - now higher jump
-            GRAVITY: 0.7,       // Was 0.9 - now floatier
+            ACCEL: 0.4,         // Acceleration when moving
+            MAX_SPEED: 2.5,     // Max walking speed (slower than before)
+            FRICTION: 0.85,     // Friction coefficient
+            ROLL_ACCEL: 0.6,    // Acceleration when rolling
+            ROLL_MAX_SPEED: 5,  // Max rolling speed (faster)
+            JUMP_VEL: -15,
+            GRAVITY: 0.7,
             SPRITE_H: 72,
             PUSH_HZ: 50, // ms
             
             CHAT_DUR: 6.0,
             CHAT_MAX: 60,
+            
+            TREE_DENSITY: 0.003, // Trees per x unit
+            TREE_MIN_DIST: 200,  // Min distance between trees
             
             SKY_COL: '#87CEEB',
             GND_TOP: 'rgb(80, 160, 60)',
@@ -111,7 +118,8 @@
             DEFAULT_BINDS: {
                 move_left: 'KeyA',
                 move_right: 'KeyD',
-                jump: 'Space'
+                jump: 'Space',
+                roll: 'ShiftLeft'
             }
         };
         
@@ -149,6 +157,18 @@
                 b = hue2rgb(p, q, h - 1/3);
             }
             return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+        }
+        
+        // Seeded random for consistent tree placement
+        class SeededRandom {
+            constructor(seed) {
+                this.seed = seed;
+            }
+            
+            next() {
+                this.seed = (this.seed * 9301 + 49297) % 233280;
+                return this.seed / 233280;
+            }
         }
         
         // ══════════════════════════════════════════════════════════ FIREBASE ══════════
@@ -237,7 +257,7 @@
                 });
             }
             
-            push(x, y, vy, onGround, facing, chat, chatTs) {
+            push(x, y, vy, vx, onGround, facing, isRolling, rollAngle, chat, chatTs) {
                 if (!this.firebaseOk) return;
                 try {
                     this.db.ref(`/players/${this.pid}`).set({
@@ -245,8 +265,11 @@
                         x: Math.round(x * 10) / 10,
                         y: Math.round(y * 10) / 10,
                         vy: Math.round(vy * 100) / 100,
+                        vx: Math.round(vx * 100) / 100,
                         grnd: onGround ? 1 : 0,
                         facing: facing,
+                        rolling: isRolling ? 1 : 0,
+                        roll_angle: Math.round(rollAngle * 100) / 100,
                         chat: chat,
                         chat_ts: chatTs
                     });
@@ -267,6 +290,7 @@
             constructor() {
                 this.sprites = {};
                 this.tintedCache = {};
+                this.treeSprite = null;
             }
             
             createPlaceholder(name, height) {
@@ -278,7 +302,8 @@
                 const colors = {
                     idle: '#4682B4',
                     move_left: '#C86446',
-                    move_right: '#46C864'
+                    move_right: '#46C864',
+                    roll: '#9146C8'
                 };
                 
                 ctx.fillStyle = colors[name] || '#A0A03C';
@@ -293,7 +318,7 @@
                 // Try to load from assets folder
                 return new Promise((resolve) => {
                     const img = new Image();
-                    img.crossOrigin = 'anonymous'; // Fix CORS issues
+                    img.crossOrigin = 'anonymous';
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
                         const ratio = height / img.height;
@@ -311,11 +336,48 @@
                 });
             }
             
+            async loadTree() {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.imageSmoothingEnabled = false;
+                        ctx.drawImage(img, 0, 0);
+                        resolve(canvas);
+                    };
+                    img.onerror = () => {
+                        // Create placeholder tree
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 80;
+                        canvas.height = 120;
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Tree trunk
+                        ctx.fillStyle = '#8B4513';
+                        ctx.fillRect(30, 70, 20, 50);
+                        
+                        // Tree crown
+                        ctx.fillStyle = '#228B22';
+                        ctx.beginPath();
+                        ctx.arc(40, 50, 35, 0, Math.PI * 2);
+                        ctx.fill();
+                        
+                        resolve(canvas);
+                    };
+                    img.src = 'assets/tree.png';
+                });
+            }
+            
             async loadAll() {
-                const names = ['idle', 'move_left', 'move_right'];
+                const names = ['idle', 'move_left', 'move_right', 'roll'];
                 for (let name of names) {
                     this.sprites[name] = await this.loadSprite(name, CONFIG.SPRITE_H);
                 }
+                this.treeSprite = await this.loadTree();
             }
             
             tintSprite(sprite, hue) {
@@ -348,7 +410,7 @@
                         
                         ctx.putImageData(imageData, 0, 0);
                     } catch (e) {
-                        // CORS error - fallback to color overlay (less precise but works)
+                        // CORS error - fallback to color overlay
                         console.warn('[Sprites] CORS error, using fallback tinting');
                         ctx.globalCompositeOperation = 'multiply';
                         const [r, g, b] = hslToRgb(hue, 0.85, 0.7);
@@ -378,9 +440,12 @@
                 
                 this.x = 0;
                 this.y = 0;
+                this.vx = 0;
                 this.vy = 0;
                 this.onGround = true;
                 this.facing = 'idle';
+                this.isRolling = false;
+                this.rollAngle = 0;
                 this.chat = '';
                 this.chatT = 0;
                 
@@ -399,14 +464,28 @@
             }
             
             physics(dt) {
+                // Apply friction
+                this.vx *= CONFIG.FRICTION;
+                
+                // Gravity
                 if (!this.onGround) {
                     this.vy += CONFIG.GRAVITY;
-                    this.y += this.vy;
                 }
+                
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Ground collision
                 if (this.y >= 0) {
                     this.y = 0;
                     this.vy = 0;
                     this.onGround = true;
+                }
+                
+                // Update roll angle based on velocity
+                if (this.isRolling && Math.abs(this.vx) > 0.1) {
+                    this.rollAngle += this.vx * 0.15;
                 }
             }
             
@@ -420,11 +499,20 @@
             }
             
             draw(ctx, camX, groundY, debugHitbox = false) {
-                const sprite = this.sprites[this.facing] || this.sprites['idle'];
+                const sprite = this.sprites[this.isRolling ? 'roll' : this.facing] || this.sprites['idle'];
                 const sx = Math.floor(this.x - camX - this.hw);
                 const sy = groundY - sprite.height + Math.floor(this.y);
                 
-                ctx.drawImage(sprite, sx, sy);
+                // Draw sprite with rotation if rolling
+                if (this.isRolling) {
+                    ctx.save();
+                    ctx.translate(Math.floor(this.x - camX), groundY + Math.floor(this.y) - this.spriteH / 2);
+                    ctx.rotate(this.rollAngle);
+                    ctx.drawImage(sprite, -sprite.width / 2, -sprite.height / 2);
+                    ctx.restore();
+                } else {
+                    ctx.drawImage(sprite, sx, sy);
+                }
                 
                 // Debug hitbox
                 if (debugHitbox) {
@@ -567,6 +655,60 @@
             }
         }
         
+        // ══════════════════════════════════════════════════════════ TREES ═════════════
+        
+        class TreeManager {
+            constructor(treeSprite) {
+                this.treeSprite = treeSprite;
+                this.treeSeed = 12345; // Fixed seed for consistent world
+                this.treeCache = new Map();
+            }
+            
+            getTreesInRange(startX, endX) {
+                const trees = [];
+                const chunkSize = 500;
+                const startChunk = Math.floor(startX / chunkSize);
+                const endChunk = Math.floor(endX / chunkSize);
+                
+                for (let chunk = startChunk; chunk <= endChunk; chunk++) {
+                    if (!this.treeCache.has(chunk)) {
+                        this.treeCache.set(chunk, this.generateTreesForChunk(chunk, chunkSize));
+                    }
+                    trees.push(...this.treeCache.get(chunk));
+                }
+                
+                return trees.filter(t => t.x >= startX - 100 && t.x <= endX + 100);
+            }
+            
+            generateTreesForChunk(chunkIndex, chunkSize) {
+                const trees = [];
+                const chunkStart = chunkIndex * chunkSize;
+                const rng = new SeededRandom(this.treeSeed + chunkIndex);
+                
+                let x = chunkStart;
+                while (x < chunkStart + chunkSize) {
+                    if (rng.next() < CONFIG.TREE_DENSITY * CONFIG.TREE_MIN_DIST) {
+                        trees.push({ x: x });
+                    }
+                    x += CONFIG.TREE_MIN_DIST;
+                }
+                
+                return trees;
+            }
+            
+            draw(ctx, camX, groundY) {
+                const viewStart = camX - 100;
+                const viewEnd = camX + CONFIG.W + 100;
+                const trees = this.getTreesInRange(viewStart, viewEnd);
+                
+                for (let tree of trees) {
+                    const tx = Math.floor(tree.x - camX - this.treeSprite.width / 2);
+                    const ty = groundY - this.treeSprite.height;
+                    ctx.drawImage(this.treeSprite, tx, ty);
+                }
+            }
+        }
+        
         // ══════════════════════════════════════════════════════════ GAME ══════════════
         
         class Game {
@@ -577,8 +719,9 @@
                 
                 this.spriteManager = new SpriteManager();
                 this.firebase = new FirebaseSync();
+                this.treeManager = null;
                 
-                this.state = 'loading';  // loading -> mainMenu -> nameInput -> playing -> paused
+                this.state = 'loading';
                 this.playerName = '';
                 this.pid = null;
                 this.local = null;
@@ -654,20 +797,17 @@
             
             handleKeyDown(e) {
                 if (this.state === 'mainMenu') {
-                    // Main menu - press Enter or Space to continue
                     if (e.code === 'Enter' || e.code === 'Space') {
                         e.preventDefault();
                         this.state = 'nameInput';
                     }
                 } else if (this.state === 'nameInput') {
-                    // Name input handling
                     if (e.code === 'Enter' && this.playerName.trim()) {
                         e.preventDefault();
                         const name = this.playerName.trim();
                         if (name.length > 20) return;
                         if (!/^[a-zA-Z0-9 _-]+$/.test(name)) return;
                         
-                        // Start game async
                         this.firebase.claimName(name).then(claimed => {
                             if (claimed) {
                                 this.startGame();
@@ -739,7 +879,6 @@
             
             handleClick() {
                 if (this.state === 'mainMenu') {
-                    // Play button
                     const bw = 280, bh = 50;
                     const bx = CONFIG.W / 2 - bw / 2;
                     const by = CONFIG.H / 2 - 30;
@@ -749,7 +888,6 @@
                         this.state = 'nameInput';
                     }
                 } else if (this.state === 'paused') {
-                    // Resume button
                     const bw = 280, bh = 50;
                     const bx = CONFIG.W / 2 - bw / 2;
                     const pw = 340, ph = 240;
@@ -782,9 +920,10 @@
                 await this.spriteManager.loadAll();
                 await this.firebase.init();
                 
+                this.treeManager = new TreeManager(this.spriteManager.treeSprite);
+                
                 document.getElementById('loadingScreen').classList.add('hidden');
                 
-                // Show main menu
                 this.state = 'mainMenu';
                 this.run();
             }
@@ -828,12 +967,21 @@
                     const rp = this.remotes[pid];
                     rp.name = data.name || '???';
                     
-                    // Smooth interpolation
+                    // Smooth interpolation for position
                     const targetX = data.x || 0;
                     rp.x += (targetX - rp.x) * 0.2;
                     
-                    // Update facing
+                    // Sync vertical position and velocity for jumps
+                    const targetY = data.y || 0;
+                    rp.y = targetY;
+                    rp.vy = data.vy || 0;
+                    rp.vx = data.vx || 0;
+                    rp.onGround = data.grnd === 1;
+                    
+                    // Update facing and rolling
                     rp.facing = data.facing || 'idle';
+                    rp.isRolling = data.rolling === 1;
+                    rp.rollAngle = data.roll_angle || 0;
                     
                     // Chat
                     const chatTs = data.chat_ts || 0;
@@ -857,15 +1005,35 @@
                 
                 // Movement
                 if (!this.typing) {
-                    const speed = CONFIG.MOVE_SPEED;
-                    if (this.keys[this.binds.move_left] || this.keys['ArrowLeft']) {
-                        this.local.x -= speed;
-                        this.local.facing = 'move_left';
-                    } else if (this.keys[this.binds.move_right] || this.keys['ArrowRight']) {
-                        this.local.x += speed;
-                        this.local.facing = 'move_right';
+                    const isShiftHeld = this.keys[this.binds.roll] || this.keys['ShiftRight'];
+                    const isMoving = this.keys[this.binds.move_left] || this.keys['ArrowLeft'] || 
+                                     this.keys[this.binds.move_right] || this.keys['ArrowRight'];
+                    
+                    // Check if rolling (shift + moving)
+                    if (isShiftHeld && (Math.abs(this.local.vx) > 0.5 || isMoving)) {
+                        this.local.isRolling = true;
+                        const accel = CONFIG.ROLL_ACCEL;
+                        const maxSpeed = CONFIG.ROLL_MAX_SPEED;
+                        
+                        if (this.keys[this.binds.move_left] || this.keys['ArrowLeft']) {
+                            this.local.vx = Math.max(this.local.vx - accel, -maxSpeed);
+                        } else if (this.keys[this.binds.move_right] || this.keys['ArrowRight']) {
+                            this.local.vx = Math.min(this.local.vx + accel, maxSpeed);
+                        }
                     } else {
-                        this.local.facing = 'idle';
+                        this.local.isRolling = false;
+                        const accel = CONFIG.ACCEL;
+                        const maxSpeed = CONFIG.MAX_SPEED;
+                        
+                        if (this.keys[this.binds.move_left] || this.keys['ArrowLeft']) {
+                            this.local.vx = Math.max(this.local.vx - accel, -maxSpeed);
+                            this.local.facing = 'move_left';
+                        } else if (this.keys[this.binds.move_right] || this.keys['ArrowRight']) {
+                            this.local.vx = Math.min(this.local.vx + accel, maxSpeed);
+                            this.local.facing = 'move_right';
+                        } else {
+                            this.local.facing = 'idle';
+                        }
                     }
                 }
                 
@@ -906,8 +1074,11 @@
                         this.local.x,
                         this.local.y,
                         this.local.vy,
+                        this.local.vx,
                         this.local.onGround,
                         this.local.facing,
+                        this.local.isRolling,
+                        this.local.rollAngle,
                         this.lastMsg,
                         this.lastMsgTs
                     );
@@ -921,6 +1092,11 @@
                 // Sky
                 ctx.fillStyle = CONFIG.SKY_COL;
                 ctx.fillRect(0, 0, CONFIG.W, CONFIG.H);
+                
+                // Draw trees behind players
+                if (this.treeManager && this.state === 'playing') {
+                    this.treeManager.draw(ctx, this.camX, groundY);
+                }
                 
                 // Ground
                 ctx.fillStyle = CONFIG.GND_TOP;
@@ -1135,7 +1311,7 @@
                 const lines = [
                     `x: ${Math.floor(this.local.x).toLocaleString()}`,
                     `online: ${Object.keys(this.remotes).length + 1}`,
-                    '/ chat  ·  ESC menu  ·  F3 debug'
+                    '/ chat  ·  SHIFT roll  ·  ESC menu  ·  F3 debug'
                 ];
                 
                 for (let i = 0; i < lines.length; i++) {
