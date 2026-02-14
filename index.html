@@ -76,14 +76,15 @@
         
         const CONFIG = {
             FIREBASE_CONFIG: {
-              apiKey: "AIzaSyCQ2kBq9EpO0OmoLiUYk0kvmz6xn4G5Pio",
-              authDomain: "bob-playgrounds.firebaseapp.com",
-              databaseURL: "https://bob-playgrounds-default-rtdb.firebaseio.com",
-              projectId: "bob-playgrounds",
-              storageBucket: "bob-playgrounds.firebasestorage.app",
-              messagingSenderId: "538331788971",
-              appId: "1:538331788971:web:5678a0f5f3816727c7a9ee",
-              measurementId: "G-RBVQKVQBBQ"
+                // REPLACE THESE WITH YOUR FIREBASE WEB CONFIG
+                // Get this from Firebase Console > Project Settings > Web App
+                apiKey: "YOUR_API_KEY",
+                authDomain: "YOUR_PROJECT.firebaseapp.com",
+                databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+                projectId: "YOUR_PROJECT",
+                storageBucket: "YOUR_PROJECT.appspot.com",
+                messagingSenderId: "YOUR_SENDER_ID",
+                appId: "YOUR_APP_ID"
             },
             
             W: 1280,
@@ -592,6 +593,10 @@
                 this.chatBlink = 0;
                 this.chatCursorVisible = true;
                 
+                this.mouseX = 0;
+                this.mouseY = 0;
+                this.mouseDown = false;
+                
                 this.camX = 0;
                 this.lastPush = 0;
                 this.lastMsg = '';
@@ -626,6 +631,26 @@
                 window.addEventListener('keyup', (e) => {
                     this.keys[e.code] = false;
                 });
+                
+                // Mouse events
+                this.canvas.addEventListener('mousemove', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const scaleX = CONFIG.W / rect.width;
+                    const scaleY = CONFIG.H / rect.height;
+                    this.mouseX = (e.clientX - rect.left) * scaleX;
+                    this.mouseY = (e.clientY - rect.top) * scaleY;
+                });
+                
+                this.canvas.addEventListener('mousedown', (e) => {
+                    this.mouseDown = true;
+                    this.handleClick();
+                });
+                
+                this.canvas.addEventListener('mouseup', (e) => {
+                    this.mouseDown = false;
+                });
+                
+                this.canvas.style.cursor = 'default';
             }
             
             handleKeyDown(e) {
@@ -708,6 +733,32 @@
                 } else if (this.state === 'paused') {
                     if (e.code === 'Escape') {
                         e.preventDefault();
+                        this.state = 'playing';
+                    }
+                }
+            }
+            
+            handleClick() {
+                if (this.state === 'mainMenu') {
+                    // Play button
+                    const bw = 280, bh = 50;
+                    const bx = CONFIG.W / 2 - bw / 2;
+                    const by = CONFIG.H / 2 - 30;
+                    
+                    if (this.mouseX >= bx && this.mouseX <= bx + bw &&
+                        this.mouseY >= by && this.mouseY <= by + bh) {
+                        this.state = 'nameInput';
+                    }
+                } else if (this.state === 'paused') {
+                    // Resume button
+                    const bw = 280, bh = 50;
+                    const bx = CONFIG.W / 2 - bw / 2;
+                    const pw = 340, ph = 240;
+                    const py = CONFIG.H / 2 - ph / 2;
+                    const by = py + 80;
+                    
+                    if (this.mouseX >= bx && this.mouseX <= bx + bw &&
+                        this.mouseY >= by && this.mouseY <= by + bh) {
                         this.state = 'playing';
                     }
                 }
@@ -938,12 +989,16 @@
                 const bx = CONFIG.W / 2 - bw / 2;
                 const by = CONFIG.H / 2 - 30;
                 
-                ctx.fillStyle = 'rgba(60, 110, 210, 0.9)';
+                // Check hover
+                const hover = this.mouseX >= bx && this.mouseX <= bx + bw &&
+                              this.mouseY >= by && this.mouseY <= by + bh;
+                
+                ctx.fillStyle = hover ? 'rgba(80, 140, 240, 0.95)' : 'rgba(60, 110, 210, 0.9)';
                 ctx.beginPath();
                 ctx.roundRect(bx, by, bw, bh, 10);
                 ctx.fill();
                 
-                ctx.strokeStyle = 'rgba(120, 170, 255, 0.8)';
+                ctx.strokeStyle = hover ? 'rgba(150, 200, 255, 1)' : 'rgba(120, 170, 255, 0.8)';
                 ctx.lineWidth = 2;
                 ctx.stroke();
                 
@@ -951,10 +1006,8 @@
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fillText('▶  Play', CONFIG.W / 2, by + 33);
                 
-                // Hint
-                ctx.font = '14px "Segoe UI"';
-                ctx.fillStyle = 'rgb(180, 200, 220)';
-                ctx.fillText('Press Enter or Space', CONFIG.W / 2, by + 90);
+                // Update cursor
+                this.canvas.style.cursor = hover ? 'pointer' : 'default';
             }
             
             drawNameInput() {
@@ -1136,10 +1189,20 @@
                 const bx = CONFIG.W / 2 - bw / 2;
                 const by = py + 80;
                 
-                ctx.fillStyle = 'rgba(60, 110, 210, 0.9)';
+                // Check hover
+                const hover = this.mouseX >= bx && this.mouseX <= bx + bw &&
+                              this.mouseY >= by && this.mouseY <= by + bh;
+                
+                ctx.fillStyle = hover ? 'rgba(80, 140, 240, 0.95)' : 'rgba(60, 110, 210, 0.9)';
                 ctx.beginPath();
                 ctx.roundRect(bx, by, bw, bh, 10);
                 ctx.fill();
+                
+                if (hover) {
+                    ctx.strokeStyle = 'rgba(150, 200, 255, 1)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
                 
                 ctx.font = 'bold 18px "Segoe UI"';
                 ctx.fillStyle = '#FFFFFF';
@@ -1149,6 +1212,9 @@
                 ctx.font = '14px "Segoe UI"';
                 ctx.fillStyle = 'rgb(180, 200, 220)';
                 ctx.fillText('Press ESC to resume', CONFIG.W / 2, py + 190);
+                
+                // Update cursor
+                this.canvas.style.cursor = hover ? 'pointer' : 'default';
             }
             
             run() {
