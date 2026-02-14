@@ -544,17 +544,17 @@
             }
             
             physics(dt) {
-                // Apply FRICTIONNN
-                this.vx *= CONFIG.FRICTION;
+                // Apply FRICTIONNN (frame-independent using exponential decay)
+                this.vx *= Math.pow(CONFIG.FRICTION, dt * 60);
                 
-                // Gravity
+                // Gravity (frame-independent)
                 if (!this.onGround) {
-                    this.vy += CONFIG.GRAVITY;
+                    this.vy += CONFIG.GRAVITY * dt * 60;
                 }
                 
-                // Update POSITIONNN
-                this.x += this.vx;
-                this.y += this.vy;
+                // Update POSITIONNN (frame-independent)
+                this.x += this.vx * dt * 60;
+                this.y += this.vy * dt * 60;
                 
                 // Ground COLLISINNNN'
                 if (this.y >= 0) {
@@ -563,9 +563,9 @@
                     this.onGround = true;
                 }
                 
-                // Update roll angle based on VELOCITYYY- that dont ryhme
+                // Update roll angle based on VELOCITYYY (frame-independent)
                 if (this.isRolling && Math.abs(this.vx) > 0.1) {
-                    this.rollAngle += this.vx * 0.15;
+                    this.rollAngle += this.vx * 0.15 * dt * 60;
                 }
             }
             
@@ -1131,7 +1131,7 @@
             update(dt) {
                 if (this.state !== 'playing') return;
                 
-                // Movement
+                // Movement (frame-independent acceleration)
                 if (!this.typing) {
                     // Check both keyboard and mobile controls
                     const leftPressed = this.keys[this.binds.move_left] || this.keys['ArrowLeft'] || this.touchButtons.left;
@@ -1149,7 +1149,7 @@
                     // Check if rolling (shift/roll button + moving)
                     if (rollPressed && (Math.abs(this.local.vx) > 0.5 || isMoving)) {
                         this.local.isRolling = true;
-                        const accel = CONFIG.ROLL_ACCEL;
+                        const accel = CONFIG.ROLL_ACCEL * dt * 60;
                         const maxSpeed = CONFIG.ROLL_MAX_SPEED;
                         
                         if (leftPressed) {
@@ -1159,7 +1159,7 @@
                         }
                     } else {
                         this.local.isRolling = false;
-                        const accel = CONFIG.ACCEL;
+                        const accel = CONFIG.ACCEL * dt * 60;
                         const maxSpeed = CONFIG.MAX_SPEED;
                         
                         if (leftPressed) {
